@@ -1,9 +1,9 @@
-package fr.bloup.minecraftAnimationTool.reader;
+package fr.bloup.minecraftAnimationTool.readers;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import fr.bloup.minecraftAnimationTool.Cache;
 import fr.bloup.minecraftAnimationTool.MinecraftAnimationTool;
+import fr.bloup.minecraftAnimationTool.records.Cache;
 import lombok.RequiredArgsConstructor;
 
 import java.io.File;

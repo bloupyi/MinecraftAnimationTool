@@ -1,6 +1,6 @@
-package fr.saofr.saoguilds.commands;
+package fr.bloup.minecraftAnimationTool.commands;
 
-import fr.saofr.saoguilds.SaoGuilds;
+import fr.bloup.minecraftAnimationTool.MinecraftAnimationTool;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 public abstract class AbstractCommand implements TabExecutor {
 
     private final Map<String, TabExecutor> subCommands = new HashMap<>();
-    protected final SaoGuilds plugin;
+    protected final MinecraftAnimationTool plugin;
 
     public abstract String getPermission();
 

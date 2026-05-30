@@ -101,12 +101,12 @@ public class EditModeManager implements Listener {
         }
 
         String cacheName = hit.pojo().getCache().name();
-        String boneName = entityManager.boneNameOf(hit.pojo().getCache(), hit.index());
+        String partName = entityManager.elementLabelOf(hit.pojo().getCache(), hit.index());
         boolean ok = entityManager.editElementMaterial(cacheName, hit.index(), material);
         if (ok) {
-            player.sendMessage("Painted bone " + boneName + " of '" + cacheName + "' with " + material.name() + ".");
+            player.sendMessage("Painted part " + partName + " of '" + cacheName + "' with " + material.name() + ".");
         } else {
-            player.sendMessage("Failed to edit bone " + boneName + " of '" + cacheName + "'.");
+            player.sendMessage("Failed to edit part " + partName + " of '" + cacheName + "'.");
         }
         clearGlow(session); // entities were respawned, drop the stale highlight; it rebuilds next tick
     }
@@ -185,12 +185,16 @@ public class EditModeManager implements Listener {
                 BlockDisplay display = displays.get(i);
                 if (display == null || display.isDead()) continue;
                 Transformation t = display.getTransformation();
+                Location loc = display.getLocation();
 
-                // World matrix of this block's unit cube: T(base+translation) * leftRot * scale * rightRot.
+                // World matrix of this block's unit cube, including the entity's facing (yaw/pitch):
+                // T(loc) * Ryaw * Rpitch * T(translation) * leftRot * scale * rightRot.
+                // For an unrotated rig (yaw=pitch=0) the rotations are identity, so nothing changes.
                 Matrix4f m = new Matrix4f()
-                        .translate((float) base.getX() + t.getTranslation().x,
-                                (float) base.getY() + t.getTranslation().y,
-                                (float) base.getZ() + t.getTranslation().z)
+                        .translate((float) loc.getX(), (float) loc.getY(), (float) loc.getZ())
+                        .rotateY((float) Math.toRadians(-loc.getYaw()))
+                        .rotateX((float) Math.toRadians(loc.getPitch()))
+                        .translate(t.getTranslation().x, t.getTranslation().y, t.getTranslation().z)
                         .rotate(t.getLeftRotation())
                         .scale(t.getScale())
                         .rotate(t.getRightRotation());

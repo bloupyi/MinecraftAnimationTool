@@ -1,0 +1,6 @@
+# Ticks between each interpolation step computed by the plugin (minimum 1).
+interpolation-updates: 1
+
+# When true, also use Minecraft's native block-display interpolation so the client
+# smoothly tweens between the plugin's steps. When false, each step snaps instantly.
+use-minecraft-interpolation: true

@@ -6,10 +6,6 @@ import org.bukkit.Material;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Handle to a spawned model. Methods resolve the live entity by uuid on each call, so a handle
- * stays valid across material edits (which respawn the rig while keeping the same uuid).
- */
 public interface AnimatedModel {
 
     String getName();

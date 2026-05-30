@@ -1,4 +1,4 @@
-package fr.bloup.minecraftAnimationTool;
+package fr.bloup.minecraftAnimationTool.records;
 
 import java.util.List;
 import java.util.Map;
@@ -17,7 +17,9 @@ public record Cache(
             double[] to,
             double[] origin,
             String type,
-            String uuid
+            String uuid,
+            double[] rotation,
+            String material
     ) {}
 
     public record Outliner(
@@ -25,7 +27,8 @@ public record Cache(
             double[] origin,
             String uuid,
             boolean visibility,
-            List<Object> children
+            List<Object> children,
+            double[] rotation
     ) {}
 
     public record Animation(
