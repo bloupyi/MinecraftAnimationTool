@@ -1,0 +1,5 @@
+name: Minecraft Animation Tool
+version: '1.0'
+main: fr.bloup.minecraftAnimationTool.MinecraftAnimationTool
+api-version: '1.18'
+authors: [ bloup ]
