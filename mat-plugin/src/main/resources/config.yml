@@ -1,0 +1,15 @@
+# Ticks between each interpolation step computed by the plugin (minimum 1).
+interpolation-updates: 1
+
+# When true, also use Minecraft's native block-display interpolation so the client
+# smoothly tweens between the plugin's steps. When false, each step snaps instantly.
+use-minecraft-interpolation: true
+
+# Number of ticks to cross-fade from the current pose into a newly played animation.
+# 0 disables blending (animations snap to their first frame).
+animation-blend-ticks: 4
+
+# Skip pushing transform updates to block displays when no player is within this many
+# blocks of a rig. Animation time keeps advancing while culled, so playback stays in sync
+# and resumes seamlessly when a player comes back into range. 0 disables culling.
+cull-distance: 0
