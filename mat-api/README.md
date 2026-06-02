@@ -33,7 +33,7 @@ controlling rigs from your own plugin.
 
 ## Requirements
 
-- **Paper** 1.20.4 (or a fork). Block displays are a 1.19.4+ feature; this build targets 1.20.4.
+- **Paper** 1.20.4+ (or a fork). Built against 1.20.4; tested only up to 1.21.4.
 - **Java 17+** on the server.
 - Optional: **MythicMobs** 5.x and **PlaceholderAPI** (auto-detected, no config needed).
 
