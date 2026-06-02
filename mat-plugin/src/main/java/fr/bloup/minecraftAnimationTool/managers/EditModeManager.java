@@ -144,8 +144,8 @@ public class EditModeManager implements Listener {
     private void applyGlowTransform(BlockDisplay glow, BlockDisplay src) {
         Transformation t = src.getTransformation();
         // Enlarge slightly so the copy encloses the real block (cleaner outline, no z-fighting).
-        Vector3f scale = new Vector3f(t.getScale()).mul(1.04f);
-        Vector3f shift = new Vector3f(t.getScale()).mul(0.02f);
+        Vector3f scale = new Vector3f(t.getScale()).mul(1f);
+        Vector3f shift = new Vector3f(t.getScale()).mul(0f);
         Vector3f translation = new Vector3f(t.getTranslation()).sub(shift);
         glow.setTransformation(new Transformation(translation, t.getLeftRotation(), scale, t.getRightRotation()));
     }

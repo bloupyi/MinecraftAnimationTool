@@ -16,7 +16,10 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.BlockDisplay;
+import org.bukkit.entity.Display;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Transformation;
 import org.bukkit.util.Vector;
@@ -36,6 +39,14 @@ public class EntityManager {
 
     /** Single global ticker that drives every active animation. */
     private BukkitTask globalTask;
+
+    /** Bukkit UUIDs of every rig entity (root + displays) spawned this session, for orphan cleanup. */
+    private final Set<UUID> liveEntityIds = new HashSet<>();
+
+    /** True for a tagged entity (root or display) belonging to a rig spawned during this session. */
+    public boolean isLiveEntity(UUID bukkitId) {
+        return liveEntityIds.contains(bukkitId);
+    }
 
     // ---- Lifecycle of the global ticker ----
 
@@ -106,6 +117,23 @@ public class EntityManager {
 
     // ---- Spawning ----
 
+    /**
+     * Light-level override applied to every block display, from {@code display-block-light} and
+     * {@code display-sky-light} in config.yml (each 0-15). Flat / planar parts only expose a single
+     * face direction so they look very dark under world lighting; forcing a brightness fixes that.
+     * Returns null when both are negative (use the world's natural lighting at the display position).
+     */
+    private Display.Brightness configuredBrightness() {
+        int block = plugin.getConfig().getInt("display-block-light", -1);
+        int sky = plugin.getConfig().getInt("display-sky-light", -1);
+        if (block < 0 && sky < 0) return null;
+        return new Display.Brightness(clampLight(block), clampLight(sky));
+    }
+
+    private static int clampLight(int v) {
+        return Math.max(0, Math.min(15, v));
+    }
+
     public void spawnEntity(EntityPOJO entityPOJO, Location location) {
         Location spawnLoc = location.clone();
         spawnLoc.setYaw(0f);
@@ -116,6 +144,7 @@ public class EntityManager {
             armorStand.setInvulnerable(true);
             armorStand.setSmall(true);
             armorStand.setMarker(true);
+            tag(armorStand, entityPOJO.getUuid());
         });
         entityPOJO.setRoot(root);
 
@@ -146,8 +175,11 @@ public class EntityManager {
                 }
             }
             final Material spawnMaterial = elementMaterial;
+            final Display.Brightness brightness = configuredBrightness();
             BlockDisplay display = root.getWorld().spawn(root.getLocation(), BlockDisplay.class, (blockDisplay) -> {
                 blockDisplay.setBlock(spawnMaterial.createBlockData());
+                if (brightness != null) blockDisplay.setBrightness(brightness);
+                tag(blockDisplay, entityPOJO.getUuid());
                 blockDisplay.setTransformation(new Transformation(
                         new Vector3f((float)posX, (float)posY, (float)posZ),
                         initialRotation,
@@ -159,148 +191,63 @@ public class EntityManager {
             entityPOJO.getBlockDisplays().add(display);
         }
 
-        for (Cache.Outliner topLevelOutliner : entityPOJO.getCache().outliner()) {
-            applyRotationRecursively(entityPOJO, topLevelOutliner, new Quaternionf().identity(), null);
-        }
-
-        // Bake the rig scale into the (already rotated) bind pose: scale offsets and sizes about the root.
+        // Build the bind (rest) pose with the SAME matrix pipeline the animator uses, so the
+        // spawned pose equals the animation-at-rest pose (no snap when an animation starts) and
+        // nested outliner/element rotations compose in the correct order. rigScale is baked in
+        // by the matrix (scale about the root), matching the previous uniform-scale behaviour.
+        Cache cache = entityPOJO.getCache();
+        Map<String, String> outlinerParent = new HashMap<>();
+        Map<String, String> elementParent = new HashMap<>();
+        Map<String, Cache.Outliner> outlinerByUuid = buildOutlinerIndex(cache, outlinerParent, elementParent);
+        Map<Integer, List<String>> chains = buildChains(cache, elementParent, outlinerParent);
         float rigScale = entityPOJO.getScale();
-        if (rigScale != 1.0f) {
-            for (BlockDisplay display : entityPOJO.getBlockDisplays()) {
-                Transformation t = display.getTransformation();
-                Vector3f tr = new Vector3f(t.getTranslation()).mul(rigScale);
-                Vector3f sc = new Vector3f(t.getScale()).mul(rigScale);
-                display.setTransformation(new Transformation(tr, t.getLeftRotation(), sc, t.getRightRotation()));
-            }
-        }
+        Map<String, Vector3f> noPos = Collections.emptyMap();
+        Map<String, Quaternionf> noRot = Collections.emptyMap();
+        Map<String, Vector3f> noScale = Collections.emptyMap();
 
-        // Snapshot the bind (rest) pose so the animation can be reset to / blended from it later.
         entityPOJO.getBaseTransformations().clear();
-        for (BlockDisplay display : entityPOJO.getBlockDisplays()) {
-            entityPOJO.getBaseTransformations().add(display.getTransformation());
+        for (int idx = 0; idx < cache.elements().size(); idx++) {
+            Transformation t = computeAnimatedTransform(cache, chains, outlinerByUuid, idx, rigScale, noPos, noRot, noScale);
+            entityPOJO.getBlockDisplays().get(idx).setTransformation(t);
+            entityPOJO.getBaseTransformations().add(t);
         }
+        plugin.markRigsDirty();
     }
 
-    private void applyRotationRecursively(EntityPOJO entityPOJO, Cache.Outliner outliner, Quaternionf parentRotation, Vector3f parentOrigin) {
-        if (outliner.children() == null) return;
+    /** Tags a rig entity so leftover ones can be cleaned up after a restart, and tracks it as live. */
+    private void tag(Entity entity, UUID rigUuid) {
+        entity.getPersistentDataContainer().set(plugin.getRigKey(), PersistentDataType.STRING, rigUuid.toString());
+        liveEntityIds.add(entity.getUniqueId());
+    }
 
-        // Origine de l'outliner
-        Vector3f outlinerOrigin = new Vector3f(
-                outliner.origin() != null ? (float)outliner.origin()[0] / 16.0f : 0f,
-                outliner.origin() != null ? (float)outliner.origin()[1] / 16.0f : 0f,
-                outliner.origin() != null ? (float)outliner.origin()[2] / 16.0f : 0f
-        );
-
-        // Rotation de l'outliner (ordre Z, X, Y)
-        Quaternionf outlinerRotation = new Quaternionf().identity();
-        if (outliner.rotation() != null) {
-            double[] rot = outliner.rotation();
-            outlinerRotation.rotateZ((float)Math.toRadians(rot[2]))
-                    .rotateX((float)Math.toRadians(rot[0]))
-                    .rotateY((float)Math.toRadians(rot[1]));
-        }
-
-        Quaternionf combinedRotation = new Quaternionf(parentRotation).mul(outlinerRotation);
-
-        for (Object childObj : outliner.children()) {
-            String childUuid;
-            Cache.Outliner childOutliner = null;
-
-            if (childObj instanceof String) {
-                childUuid = childObj.toString();
-            } else if (childObj instanceof LinkedTreeMap) {
-                LinkedTreeMap<?, ?> map = (LinkedTreeMap<?, ?>) childObj;
-                childUuid = (String) map.get("uuid");
-                String name = (String) map.get("name");
-                double[] origin = map.get("origin") != null
-                        ? ((ArrayList<?>) map.get("origin")).stream().mapToDouble(o -> ((Number)o).doubleValue()).toArray()
-                        : null;
-                boolean visibility = map.get("visibility") != null && (Boolean) map.get("visibility");
-                List<Object> children = (List<Object>) map.get("children");
-                double[] rotation = map.get("rotation") != null
-                        ? ((ArrayList<?>) map.get("rotation")).stream().mapToDouble(o -> ((Number)o).doubleValue()).toArray()
-                        : null;
-                childOutliner = new Cache.Outliner(name, origin, childUuid, visibility, children, rotation);
-            } else {
-                String str = childObj.toString();
-                if (str.contains("uuid=")) {
-                    childUuid = str.split("uuid=")[1].split(",")[0].trim();
-                } else {
-                    childUuid = null;
-                }
-            }
-
-            Cache.Element element = entityPOJO.getCache().elements().stream()
-                    .filter(e -> e.uuid().equals(childUuid))
-                    .findFirst()
-                    .orElse(null);
-
-            if (element != null) {
-                int index = entityPOJO.getCache().elements().indexOf(element);
-                BlockDisplay display = entityPOJO.getBlockDisplays().get(index);
-
-                Transformation currentTransform = display.getTransformation();
-                Vector3f pos = currentTransform.getTranslation();
-                Vector3f scale = currentTransform.getScale();
-
-                // Origine de l'élément
-                Vector3f elementOrigin = new Vector3f(
-                        element.origin() != null ? (float)element.origin()[0] / 16.0f : 0f,
-                        element.origin() != null ? (float)element.origin()[1] / 16.0f : 0f,
-                        element.origin() != null ? (float)element.origin()[2] / 16.0f : 0f
-                );
-
-                // Rotation de l'élément (ordre Z, X, Y)
-                Quaternionf elementRotation = new Quaternionf().identity();
-                if (element.rotation() != null) {
-                    double[] rot = element.rotation();
-                    elementRotation.rotateZ((float)Math.toRadians(rot[2]))
-                            .rotateX((float)Math.toRadians(rot[0]))
-                            .rotateY((float)Math.toRadians(rot[1]));
-                }
-
-                // Position après rotation outliner
-                Vector3f newPos = new Vector3f(pos);
-
-                newPos.sub(outlinerOrigin);
-                newPos.rotate(outlinerRotation);
-                newPos.add(outlinerOrigin);
-
-                // Position après rotation élément
-                newPos.sub(elementOrigin);
-                newPos.rotate(elementRotation);
-                newPos.add(elementOrigin);
-
-                // Position après rotation parent
-                if (parentOrigin != null) {
-                    newPos.sub(parentOrigin);
-                    newPos.rotate(parentRotation);
-                    newPos.add(parentOrigin);
-                }
-
-                // Rotation totale
-                Quaternionf totalRotation = new Quaternionf(combinedRotation).mul(elementRotation);
-
-                display.setTransformation(new Transformation(
-                        newPos,
-                        totalRotation,
-                        scale,
-                        new Quaternionf().identity()
-                ));
-            }
-
-            // Récupération du sous-outliner pour la récursivité
-            if (childOutliner == null && childUuid != null) {
-                childOutliner = entityPOJO.getCache().outliner().stream()
-                        .filter(o -> o.uuid().equals(childUuid))
-                        .findFirst()
-                        .orElse(null);
-            }
-
-            if (childOutliner != null) {
-                applyRotationRecursively(entityPOJO, childOutliner, combinedRotation, outlinerOrigin);
+    /** Indexes the outliner tree, filling parent maps, and returns uuid -> Outliner. */
+    private Map<String, Cache.Outliner> buildOutlinerIndex(Cache cache,
+                                                           Map<String, String> outlinerParent,
+                                                           Map<String, String> elementParent) {
+        Map<String, Cache.Outliner> byUuid = new HashMap<>();
+        if (cache.outliner() != null) {
+            for (Cache.Outliner root : cache.outliner()) {
+                indexOutliner(root, null, byUuid, outlinerParent, elementParent);
             }
         }
+        return byUuid;
+    }
+
+    /** For every element index, the chain of bone uuids from the outermost ancestor down to its bone. */
+    private Map<Integer, List<String>> buildChains(Cache cache,
+                                                   Map<String, String> elementParent,
+                                                   Map<String, String> outlinerParent) {
+        Map<Integer, List<String>> chains = new HashMap<>();
+        for (int i = 0; i < cache.elements().size(); i++) {
+            List<String> chain = new ArrayList<>();
+            String pUuid = elementParent.get(cache.elements().get(i).uuid());
+            while (pUuid != null) {
+                chain.add(0, pUuid);
+                pUuid = outlinerParent.get(pUuid);
+            }
+            chains.put(i, chain);
+        }
+        return chains;
     }
 
     // ---- Animation playback ----
@@ -327,10 +274,12 @@ public class EntityManager {
         st.setOnEnd(onEnd);
 
         entityPOJO.setAnimationState(st);
+        entityPOJO.setHeldAnimation(null); // actively playing now; the live state is what gets saved
         startTicker();
         // Apply the very first frame immediately so there is no one-tick gap.
         applyPose(entityPOJO, st, plugin.getConfig().getBoolean("use-minecraft-interpolation", true),
                 Math.max(1, plugin.getConfig().getInt("interpolation-updates", 1)));
+        plugin.markRigsDirty();
         return true;
     }
 
@@ -344,6 +293,7 @@ public class EntityManager {
         startTicker();
         applyPose(entityPOJO, st, false,
                 Math.max(1, plugin.getConfig().getInt("interpolation-updates", 1)));
+        plugin.markRigsDirty();
         return true;
     }
 
@@ -351,6 +301,7 @@ public class EntityManager {
         AnimationState st = pojo.getAnimationState();
         if (st == null) return false;
         st.setPaused(true);
+        plugin.markRigsDirty();
         return true;
     }
 
@@ -359,6 +310,7 @@ public class EntityManager {
         if (st == null) return false;
         st.setPaused(false);
         startTicker();
+        plugin.markRigsDirty();
         return true;
     }
 
@@ -366,6 +318,7 @@ public class EntityManager {
         AnimationState st = pojo.getAnimationState();
         if (st == null) return false;
         st.setSpeed(speed);
+        plugin.markRigsDirty();
         return true;
     }
 
@@ -404,12 +357,9 @@ public class EntityManager {
             scaleKf.put(e.getKey(), filterAndSort(e.getValue().keyframes(), "scale"));
         }
 
-        final Map<String, Cache.Outliner> outlinerByUuid = new HashMap<>();
         final Map<String, String> outlinerParent = new HashMap<>();
         final Map<String, String> elementParent = new HashMap<>();
-        for (Cache.Outliner root : cache.outliner()) {
-            indexOutliner(root, null, outlinerByUuid, outlinerParent, elementParent);
-        }
+        final Map<String, Cache.Outliner> outlinerByUuid = buildOutlinerIndex(cache, outlinerParent, elementParent);
 
         final Map<String, Integer> elementIndex = new HashMap<>();
         for (int i = 0; i < cache.elements().size(); i++) {
@@ -432,19 +382,12 @@ public class EntityManager {
                 outlinerByUuid, outlinerParent, elementParent, elementIndex, sounds, computedLength, loop);
 
         // Precompute, for every element, its owning bone chain and whether it is animated at all.
-        Map<Integer, List<String>> chains = new HashMap<>();
+        Map<Integer, List<String>> chains = buildChains(cache, elementParent, outlinerParent);
         Set<Integer> animatedIndices = new HashSet<>();
-        for (Map.Entry<String, Integer> entry : elementIndex.entrySet()) {
-            List<String> chain = new ArrayList<>();
-            String pUuid = elementParent.get(entry.getKey());
-            while (pUuid != null) {
-                chain.add(0, pUuid);
-                pUuid = outlinerParent.get(pUuid);
-            }
-            chains.put(entry.getValue(), chain);
-            for (String boneUuid : chain) {
+        for (Map.Entry<Integer, List<String>> entry : chains.entrySet()) {
+            for (String boneUuid : entry.getValue()) {
                 if (animation.animators().containsKey(boneUuid)) {
-                    animatedIndices.add(entry.getValue());
+                    animatedIndices.add(entry.getKey());
                     break;
                 }
             }
@@ -525,7 +468,11 @@ public class EntityManager {
 
         if (ended) {
             Runnable cb = st.getOnEnd();
+            // Remember the final frame so persistence can restore this held pose after a restart.
+            pojo.setHeldAnimation(st.getAnimationName());
+            pojo.setHeldTime(st.getTime());
             pojo.setAnimationState(null); // final pose already applied; rig holds it
+            plugin.markRigsDirty();
             if (cb != null) {
                 try {
                     cb.run();
@@ -567,7 +514,8 @@ public class EntityManager {
 
             Transformation target;
             if (st.getAnimatedIndices().contains(idx)) {
-                target = computeAnimatedTransform(cache, st, idx, rigScale, boneAnimPos, boneAnimRot, boneAnimScale);
+                target = computeAnimatedTransform(cache, st.getChains(), st.getOutlinerByUuid(), idx, rigScale,
+                        boneAnimPos, boneAnimRot, boneAnimScale);
             } else if (idx < base.size()) {
                 target = base.get(idx);
             } else {
@@ -593,16 +541,19 @@ public class EntityManager {
         }
     }
 
-    private Transformation computeAnimatedTransform(Cache cache, AnimationState st, int idx, float rigScale,
+    private Transformation computeAnimatedTransform(Cache cache,
+                                                    Map<Integer, List<String>> chains,
+                                                    Map<String, Cache.Outliner> outlinerByUuid,
+                                                    int idx, float rigScale,
                                                     Map<String, Vector3f> boneAnimPos,
                                                     Map<String, Quaternionf> boneAnimRot,
                                                     Map<String, Vector3f> boneAnimScale) {
         Cache.Element element = cache.elements().get(idx);
-        List<String> chain = st.getChains().getOrDefault(idx, Collections.emptyList());
+        List<String> chain = chains.getOrDefault(idx, Collections.emptyList());
 
         Matrix4f M = new Matrix4f().scale(rigScale);
         for (String oUuid : chain) {
-            Cache.Outliner o = st.getOutlinerByUuid().get(oUuid);
+            Cache.Outliner o = outlinerByUuid.get(oUuid);
             if (o == null) continue;
             Vector3f Oo = originVec(o.origin());
             Quaternionf Rstatic = eulerZXY(o.rotation());
@@ -634,7 +585,7 @@ public class EntityManager {
 
         Vector3f translation = M.getTranslation(new Vector3f());
         Vector3f finalScale = M.getScale(new Vector3f());
-        Quaternionf leftRot = extractRotation(M, finalScale);
+        Quaternionf leftRot = extractRotation(M);
         return new Transformation(translation, leftRot, finalScale, new Quaternionf());
     }
 
@@ -706,30 +657,23 @@ public class EntityManager {
 
     private Quaternionf interpolateRotation(List<Cache.Keyframe> keyframes, double time) {
         if (keyframes == null || keyframes.isEmpty()) return new Quaternionf().identity();
-        if (keyframes.size() == 1 || time <= keyframes.get(0).time()) {
-            return eulerKeyframe(keyframes.get(0));
-        }
-        for (int i = 0; i < keyframes.size() - 1; i++) {
-            Cache.Keyframe kf = keyframes.get(i);
-            Cache.Keyframe nextKf = keyframes.get(i + 1);
-            if (time >= kf.time() && time <= nextKf.time()) {
-                double span = nextKf.time() - kf.time();
-                float t = span <= 0 ? 0f : (float) ((time - kf.time()) / span);
-                Quaternionf rotA = eulerKeyframe(kf);
-                if ("step".equals(safeInterp(kf))) return rotA;
-                Quaternionf rotB = eulerKeyframe(nextKf);
-                float f = (float) ease(kf.easing(), kf.easingArgs(), t);
-                return new Quaternionf(rotA).slerp(rotB, f);
-            }
-        }
-        return eulerKeyframe(keyframes.get(keyframes.size() - 1));
+        // Interpolate the Euler angles (degrees) linearly like Blockbench, then build the
+        // quaternion. Slerping quaternions instead collapses >=180 deg / 360 deg spins (e.g.
+        // a rotating wheel) into the antipodal-degenerate case, which yields no rotation or a
+        // non-unit quaternion that bleeds scale into the matrix (jitter / grow-shrink).
+        Vector3f euler = interpolateVector3(keyframes, time, new Vector3f(0, 0, 0));
+        return eulerDegrees(euler.x, euler.y, euler.z);
     }
 
     private Quaternionf eulerKeyframe(Cache.Keyframe kf) {
         Map<String, String> data = kf.data_points().get(0);
-        float x = evalExpr(data.get("x"), kf.time());
-        float y = evalExpr(data.get("y"), kf.time());
-        float z = evalExpr(data.get("z"), kf.time());
+        return eulerDegrees(
+                evalExpr(data.get("x"), kf.time()),
+                evalExpr(data.get("y"), kf.time()),
+                evalExpr(data.get("z"), kf.time()));
+    }
+
+    private Quaternionf eulerDegrees(float x, float y, float z) {
         return new Quaternionf().identity()
                 .rotateZ((float) Math.toRadians(z))
                 .rotateX((float) Math.toRadians(-x))
@@ -937,24 +881,32 @@ public class EntityManager {
                 .rotateY((float) Math.toRadians(rot[1]));
     }
 
-    private Quaternionf extractRotation(Matrix4f M, Vector3f scale) {
-        Matrix4f scaleless = new Matrix4f(M);
-        if (scale.x > 1e-8f) {
-            scaleless.m00(scaleless.m00() / scale.x);
-            scaleless.m01(scaleless.m01() / scale.x);
-            scaleless.m02(scaleless.m02() / scale.x);
-        }
-        if (scale.y > 1e-8f) {
-            scaleless.m10(scaleless.m10() / scale.y);
-            scaleless.m11(scaleless.m11() / scale.y);
-            scaleless.m12(scaleless.m12() / scale.y);
-        }
-        if (scale.z > 1e-8f) {
-            scaleless.m20(scaleless.m20() / scale.z);
-            scaleless.m21(scaleless.m21() / scale.z);
-            scaleless.m22(scaleless.m22() / scale.z);
-        }
-        return scaleless.getNormalizedRotation(new Quaternionf());
+    private Quaternionf extractRotation(Matrix4f M) {
+        // Normalize each basis column (column length == that axis' scale) to recover the pure
+        // rotation. A planar element (zero thickness on one axis) has a zero-length column;
+        // dividing by ~0 leaves it degenerate and getNormalizedRotation returns an unstable
+        // rotation (paper-thin cubes jitter / look mis-scaled), so rebuild that axis from the
+        // cross product of the other two to keep the basis orthonormal.
+        Vector3f cx = new Vector3f(M.m00(), M.m01(), M.m02());
+        Vector3f cy = new Vector3f(M.m10(), M.m11(), M.m12());
+        Vector3f cz = new Vector3f(M.m20(), M.m21(), M.m22());
+        float lx = cx.length(), ly = cy.length(), lz = cz.length();
+        boolean dx = lx > 1e-6f, dy = ly > 1e-6f, dz = lz > 1e-6f;
+        if (dx) cx.mul(1f / lx);
+        if (dy) cy.mul(1f / ly);
+        if (dz) cz.mul(1f / lz);
+
+        int ok = (dx ? 1 : 0) + (dy ? 1 : 0) + (dz ? 1 : 0);
+        if (ok <= 1) return new Quaternionf(); // line/point: orientation is irrelevant and unstable
+        if (!dx) cx.set(cy).cross(cz).normalize();
+        else if (!dy) cy.set(cz).cross(cx).normalize();
+        else if (!dz) cz.set(cx).cross(cy).normalize();
+
+        Matrix4f r = new Matrix4f()
+                .m00(cx.x).m01(cx.y).m02(cx.z)
+                .m10(cy.x).m11(cy.y).m12(cy.z)
+                .m20(cz.x).m21(cz.y).m22(cz.z);
+        return r.getNormalizedRotation(new Quaternionf());
     }
 
     private static boolean transformsClose(Transformation a, Transformation b) {
@@ -1242,13 +1194,23 @@ public class EntityManager {
                 Transformation t = display.getTransformation();
                 Location loc = display.getLocation();
 
+                // Planar elements have ~0 scale on one axis, which makes the transform singular
+                // (invert() yields NaN/Inf and the slab test never hits). Give those axes a small
+                // pickable thickness; the broad faces stay full-size so the part is still clickable.
+                final float minPick = 1f / 32f;
+                Vector3f ts = t.getScale();
+                Vector3f sc = new Vector3f(
+                        Math.abs(ts.x) < minPick ? minPick : ts.x,
+                        Math.abs(ts.y) < minPick ? minPick : ts.y,
+                        Math.abs(ts.z) < minPick ? minPick : ts.z);
+
                 Matrix4f m = new Matrix4f()
                         .translate((float) loc.getX(), (float) loc.getY(), (float) loc.getZ())
                         .rotateY((float) Math.toRadians(-loc.getYaw()))
                         .rotateX((float) Math.toRadians(loc.getPitch()))
                         .translate(t.getTranslation().x, t.getTranslation().y, t.getTranslation().z)
                         .rotate(t.getLeftRotation())
-                        .scale(t.getScale())
+                        .scale(sc)
                         .rotate(t.getRightRotation());
                 Matrix4f inv = m.invert(new Matrix4f());
 
@@ -1356,7 +1318,14 @@ public class EntityManager {
 
     /** Stops the animation loop currently running on the entity, if any. */
     public void stopAnimation(EntityPOJO pojo) {
+        // stop keeps the current pose: remember it so persistence can restore the frozen frame.
+        AnimationState st = pojo.getAnimationState();
+        if (st != null) {
+            pojo.setHeldAnimation(st.getAnimationName());
+            pojo.setHeldTime(st.getTime());
+        }
         pojo.setAnimationState(null);
+        plugin.markRigsDirty();
     }
 
     /**
@@ -1369,6 +1338,7 @@ public class EntityManager {
         for (BlockDisplay display : pojo.getBlockDisplays()) {
             if (display != null && !display.isDead()) display.teleport(target);
         }
+        plugin.markRigsDirty();
     }
 
     /**
@@ -1397,6 +1367,7 @@ public class EntityManager {
                 d.setTransformation(scaleAbout(d.getTransformation(), factor));
             }
         }
+        plugin.markRigsDirty();
         return true;
     }
 
@@ -1415,11 +1386,13 @@ public class EntityManager {
         for (BlockDisplay display : pojo.getBlockDisplays()) {
             if (display != null && !display.isDead()) display.setRotation(yaw, pitch);
         }
+        plugin.markRigsDirty();
     }
 
     /** Stops the animation and restores the rig to its initial (bind) pose. */
     public void resetAnimation(EntityPOJO pojo) {
         stopAnimation(pojo);
+        pojo.setHeldAnimation(null); // back to the bind pose; nothing to hold
         List<BlockDisplay> displays = pojo.getBlockDisplays();
         List<Transformation> base = pojo.getBaseTransformations();
         for (int i = 0; i < displays.size() && i < base.size(); i++) {
@@ -1437,15 +1410,18 @@ public class EntityManager {
         if (pojo.getBlockDisplays() != null) {
             for (BlockDisplay display : pojo.getBlockDisplays()) {
                 if (display != null && !display.isDead()) {
+                    liveEntityIds.remove(display.getUniqueId());
                     display.remove();
                 }
             }
         }
         // Remove root ArmorStand
         if (pojo.getRoot() != null && pojo.getRoot().isValid()) {
+            liveEntityIds.remove(pojo.getRoot().getUniqueId());
             pojo.getRoot().remove();
         }
         // Remove from entityPOJOS list
         plugin.getEntityPOJOS().remove(pojo);
+        plugin.markRigsDirty();
     }
 }

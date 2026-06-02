@@ -13,3 +13,15 @@ animation-blend-ticks: 4
 # blocks of a rig. Animation time keeps advancing while culled, so playback stays in sync
 # and resumes seamlessly when a player comes back into range. 0 disables culling.
 cull-distance: 0
+
+# Light-level override for every block display (each 0-15: 15 = fully lit, 0 = pitch black).
+# Flat / planar parts only show one face direction, so under natural world lighting they can
+# look very dark; forcing a brightness keeps the whole rig evenly lit. Set either value to -1
+# to use the world's natural lighting at the display's position instead.
+display-block-light: 15
+display-sky-light: 15
+
+# Persist spawned rigs across server restarts and plugin reloads. When true, rigs (and their
+# current animation) are saved to rigs.yml and recreated on startup; leftover rig entities from
+# a previous run are cleaned up automatically. Set to false to make rigs disappear on shutdown.
+persist-rigs: true

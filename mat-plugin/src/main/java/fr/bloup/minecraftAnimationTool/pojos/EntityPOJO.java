@@ -26,6 +26,14 @@ public class EntityPOJO {
     /** Current playback state, or null when no animation is active. Driven by the global ticker. */
     @Setter private AnimationState animationState;
 
+    /**
+     * The last animation whose pose the rig is statically holding while {@link #animationState} is
+     * null (a finished non-looping animation, or a {@code stop}), with the time it was frozen at.
+     * Persisted so that pose is restored on restart. Null when the rig sits at its bind pose.
+     */
+    @Setter private String heldAnimation;
+    @Setter private double heldTime;
+
     public EntityPOJO(String name, UUID uuid, Cache cache) {
         this.name = name;
         this.uuid = uuid;
