@@ -2,18 +2,22 @@ package fr.bloup.minecraftAnimationTool.commands;
 
 import fr.bloup.minecraftAnimationTool.MinecraftAnimationTool;
 import fr.bloup.minecraftAnimationTool.commands.subs.matsubs.*;
+import fr.bloup.minecraftAnimationTool.gui.GuiManager;
 import fr.bloup.minecraftAnimationTool.managers.EditModeManager;
 import fr.bloup.minecraftAnimationTool.managers.EntityManager;
 import fr.bloup.minecraftAnimationTool.readers.BlueprintCache;
 import fr.bloup.minecraftAnimationTool.readers.CacheReader;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 
 public class MATCommand extends AbstractCommand {
     private final HelpSubCommand help = new HelpSubCommand();
+    private final GuiManager guiManager;
 
-    public MATCommand(MinecraftAnimationTool plugin, EntityManager entityManager, BlueprintCache blueprintCache, CacheReader cacheReader, EditModeManager editModeManager) {
+    public MATCommand(MinecraftAnimationTool plugin, EntityManager entityManager, BlueprintCache blueprintCache, CacheReader cacheReader, EditModeManager editModeManager, GuiManager guiManager) {
         super(plugin);
+        this.guiManager = guiManager;
         registerSubCommand("help", help);
         registerSubCommand("reload", new ReloadSubCommand(plugin, blueprintCache, cacheReader));
         registerSubCommand("info", new InfoSubCommand(plugin, entityManager));
@@ -37,6 +41,10 @@ public class MATCommand extends AbstractCommand {
 
     @Override
     public boolean runCommand(CommandSender sender, Command rootCommand, String label, String[] args) {
+        if (args.length == 0 && sender instanceof Player player) {
+            guiManager.openMain(player);
+            return true;
+        }
         return help.onCommand(sender, rootCommand, label, args);
     }
 }

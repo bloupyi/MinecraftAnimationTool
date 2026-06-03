@@ -5,6 +5,7 @@ import fr.bloup.minecraftAnimationTool.listeners.EntityListener;
 import fr.bloup.minecraftAnimationTool.api.MatApiImpl;
 import fr.bloup.minecraftAnimationTool.api.MinecraftAnimationToolApi;
 import fr.bloup.minecraftAnimationTool.listeners.RigCleanupListener;
+import fr.bloup.minecraftAnimationTool.gui.GuiManager;
 import fr.bloup.minecraftAnimationTool.managers.EditModeManager;
 import fr.bloup.minecraftAnimationTool.managers.EntityManager;
 import fr.bloup.minecraftAnimationTool.persistence.RigStore;
@@ -43,6 +44,7 @@ public final class MinecraftAnimationTool extends JavaPlugin {
     private final BlueprintCache blueprintCache = new BlueprintCache(this);
     private final CacheReader cacheReader = new CacheReader(this);
     private final EditModeManager editModeManager = new EditModeManager(this, entityManager);
+    private final GuiManager guiManager = new GuiManager(this, entityManager, editModeManager);
 
     private static MinecraftAnimationToolApi api;
 
@@ -93,6 +95,7 @@ public final class MinecraftAnimationTool extends JavaPlugin {
         this.listeners.add(editModeManager);
         this.listeners.add(new fr.bloup.minecraftAnimationTool.listeners.ModelInteractionListener(this, entityManager, editModeManager));
         this.listeners.add(new RigCleanupListener(this, entityManager));
+        this.listeners.add(guiManager);
 
         registerListeners();
         registerCommands();
@@ -109,6 +112,10 @@ public final class MinecraftAnimationTool extends JavaPlugin {
                     new fr.bloup.minecraftAnimationTool.mythic.MythicHook(api), this);
             log.info("Hooked into MythicMobs.");
         }
+
+        // Plugin chunk tickets persist across restarts; drop any left over from a previous run before
+        // restoreRigs re-adds them, so we never keep chunks loaded for rigs that no longer exist.
+        for (World world : Bukkit.getWorlds()) world.removePluginChunkTickets(this);
 
         if (isPersistEnabled()) {
             cleanupOrphanRigEntities();
@@ -211,8 +218,8 @@ public final class MinecraftAnimationTool extends JavaPlugin {
     }
 
     private void registerCommands(){
-        this.getCommand("minecraftanimationtool").setExecutor(new MATCommand(this,entityManager,blueprintCache,cacheReader,editModeManager));
-        this.getCommand("mat").setExecutor(new MATCommand(this,entityManager,blueprintCache,cacheReader,editModeManager));
+        this.getCommand("minecraftanimationtool").setExecutor(new MATCommand(this,entityManager,blueprintCache,cacheReader,editModeManager,guiManager));
+        this.getCommand("mat").setExecutor(new MATCommand(this,entityManager,blueprintCache,cacheReader,editModeManager,guiManager));
     }
 
     private void registerListeners(){

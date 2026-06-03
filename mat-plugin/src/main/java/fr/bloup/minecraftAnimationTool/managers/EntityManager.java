@@ -211,7 +211,34 @@ public class EntityManager {
             entityPOJO.getBlockDisplays().get(idx).setTransformation(t);
             entityPOJO.getBaseTransformations().add(t);
         }
+        // Keep the rig's chunk loaded so it never unloads from under us (which would otherwise remove
+        // the entities and let EntityRemoveEvent tear the rig down - the reason rigs vanished on
+        // disconnect). The ticket is released in removeEntity once no rig occupies the chunk.
+        addChunkTicket(location);
         plugin.markRigsDirty();
+    }
+
+    // ---- Chunk tickets (keep rig chunks loaded for the session) ----
+
+    private void addChunkTicket(Location loc) {
+        if (loc == null || loc.getWorld() == null) return;
+        loc.getWorld().addPluginChunkTicket(loc.getBlockX() >> 4, loc.getBlockZ() >> 4, plugin);
+    }
+
+    /** Releases the chunk ticket at {@code loc} unless another live rig (other than {@code keep}) sits there. */
+    private void releaseChunkTicket(Location loc, EntityPOJO keep) {
+        if (loc == null || loc.getWorld() == null) return;
+        int cx = loc.getBlockX() >> 4;
+        int cz = loc.getBlockZ() >> 4;
+        for (EntityPOJO other : plugin.getEntityPOJOS()) {
+            if (other == keep) continue;
+            if (other.getRoot() == null || !other.getRoot().isValid()) continue;
+            Location ol = other.getRoot().getLocation();
+            if (loc.getWorld().equals(ol.getWorld()) && (ol.getBlockX() >> 4) == cx && (ol.getBlockZ() >> 4) == cz) {
+                return; // still occupied, keep it loaded
+            }
+        }
+        loc.getWorld().removePluginChunkTicket(cx, cz, plugin);
     }
 
     /** Tags a rig entity so leftover ones can be cleaned up after a restart, and tracks it as live. */
@@ -1333,10 +1360,19 @@ public class EntityManager {
      * The location's yaw/pitch become the facing direction of the rig.
      */
     public void teleport(EntityPOJO pojo, Location location) {
+        Location old = (pojo.getRoot() != null && pojo.getRoot().isValid()) ? pojo.getRoot().getLocation() : null;
         Location target = location.clone();
         if (pojo.getRoot() != null && pojo.getRoot().isValid()) pojo.getRoot().teleport(target);
         for (BlockDisplay display : pojo.getBlockDisplays()) {
             if (display != null && !display.isDead()) display.teleport(target);
+        }
+        // Move the chunk ticket if the rig crossed a chunk boundary (add the new one first so the
+        // rig is never momentarily unloaded), then release the old chunk if nothing else needs it.
+        addChunkTicket(target);
+        if (old != null && (!old.getWorld().equals(target.getWorld())
+                || (old.getBlockX() >> 4) != (target.getBlockX() >> 4)
+                || (old.getBlockZ() >> 4) != (target.getBlockZ() >> 4))) {
+            releaseChunkTicket(old, pojo);
         }
         plugin.markRigsDirty();
     }
@@ -1406,6 +1442,8 @@ public class EntityManager {
 
     public void removeEntity(EntityPOJO pojo) {
         stopAnimation(pojo);
+        // Remember the chunk while the root is still valid, to release its ticket afterwards.
+        Location rigLoc = (pojo.getRoot() != null && pojo.getRoot().isValid()) ? pojo.getRoot().getLocation() : null;
         // Remove BlockDisplays
         if (pojo.getBlockDisplays() != null) {
             for (BlockDisplay display : pojo.getBlockDisplays()) {
@@ -1422,6 +1460,7 @@ public class EntityManager {
         }
         // Remove from entityPOJOS list
         plugin.getEntityPOJOS().remove(pojo);
+        releaseChunkTicket(rigLoc, pojo);
         plugin.markRigsDirty();
     }
 }
