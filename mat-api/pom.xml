@@ -27,7 +27,8 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
+                <!-- 3.8.1 (not 3.13.0): 3.11+ requires Maven 3.6.3, which is newer than JitPack's bundled Maven. -->
+                <version>3.8.1</version>
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
