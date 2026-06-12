@@ -14,7 +14,7 @@
     <packaging>jar</packaging>
 
     <name>MinecraftAnimationTool</name>
-    <description>Paid implementation jar. Bundles the API so the server has both at runtime.</description>
+    <description>Implementation jar. Bundles the API so the server has both at runtime.</description>
 
     <build>
         <finalName>MinecraftAnimationTool-${project.version}</finalName>

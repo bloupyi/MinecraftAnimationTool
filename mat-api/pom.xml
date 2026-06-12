@@ -5,9 +5,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <!--
-      Self-contained on purpose (no <parent>): this module is meant to be pushed to a PUBLIC repo
-      and built by JitPack on its own, while the paid plugin stays in a private repo. It still builds
-      as part of the monorepo reactor for local development.
+      Self-contained on purpose (no <parent>): JitPack builds this module on its own (see the root
+      jitpack.yml, which restricts the build to `-pl mat-api`), so the full plugin is never published
+      as a Maven artifact. It still builds as part of the monorepo reactor for local development.
     -->
     <groupId>fr.bloup</groupId>
     <artifactId>MinecraftAnimationTool-API</artifactId>
@@ -15,7 +15,7 @@
     <packaging>jar</packaging>
 
     <name>MinecraftAnimationTool API</name>
-    <description>Public, free API for MinecraftAnimationTool. Compile against this; the paid plugin jar provides the implementation at runtime.</description>
+    <description>Public, free API for MinecraftAnimationTool. Compile against this; the plugin jar provides the implementation at runtime.</description>
 
     <properties>
         <java.version>17</java.version>

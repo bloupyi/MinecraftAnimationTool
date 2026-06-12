@@ -205,8 +205,8 @@ Changing these and running `/mat reload` applies them live.
 
 ## Developer API
 
-Other plugins can spawn and control rigs **without owning the paid jar** — compile against the free API
-below. At runtime the paid plugin must be installed on the server, otherwise the service is absent and
+Other plugins can spawn and control rigs **without bundling the plugin itself** — compile against the free API
+below. At runtime the plugin must be installed on the server, otherwise the service is absent and
 your code degrades gracefully.
 
 ### Add the dependency (JitPack)
@@ -238,7 +238,7 @@ dependencies { compileOnly 'com.github.bloupyi.MinecraftAnimationTool:MinecraftA
 
 > The API lives in the `mat-api/` submodule of this repo, so the JitPack group is
 > `com.github.bloupyi.MinecraftAnimationTool` (i.e. `com.github.<user>.<repo>`), not just
-> `com.github.bloupyi`. JitPack builds only this module (see `jitpack.yml`); the paid plugin is never published.
+> `com.github.bloupyi`. JitPack builds only this module (see `jitpack.yml`); the full plugin is never published.
 
 ### Use it
 
@@ -249,7 +249,7 @@ softdepend: [ MinecraftAnimationTool ]
 ```
 
 Resolve the API through Bukkit's service manager (works with only this API on your classpath; returns
-`null` when the paid plugin is not installed):
+`null` when the plugin is not installed):
 
 ```java
 import fr.bloup.minecraftAnimationTool.api.MinecraftAnimationToolApi;

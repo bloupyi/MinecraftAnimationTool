@@ -1,7 +1,7 @@
 # JitPack configuration for this monorepo.
 #
-# IMPORTANT: JitPack must build ONLY the free public API module (mat-api).
-# The paid plugin (mat-plugin) is intentionally never built or published here,
+# IMPORTANT: JitPack must build ONLY the public API module (mat-api).
+# The full plugin (mat-plugin) is intentionally never built or published here,
 # so it can never be pulled as a Maven dependency through JitPack.
 #
 # mat-api is self-contained (no <parent>), so `-pl mat-api` builds it alone
