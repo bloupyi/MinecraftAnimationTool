@@ -1,12 +1,11 @@
-# JitPack configuration for this monorepo.
+# JitPack configuration for this multi-module repo.
 #
-# IMPORTANT: JitPack must build ONLY the public API module (mat-api).
-# The full plugin (mat-plugin) is intentionally never built or published here,
-# so it can never be pulled as a Maven dependency through JitPack.
+# We let JitPack run its default multi-module build (`mvn install` on the
+# reactor) so it correctly publishes each submodule as a resolvable artifact:
+#   com.github.bloupyi.MinecraftAnimationTool:MinecraftAnimationTool-API:<tag>
+# (a custom `install: -pl mat-api` produced a green build but no resolvable
+# artifact, so it was removed).
 #
-# mat-api is self-contained (no <parent>), so `-pl mat-api` builds it alone
-# without touching mat-plugin or its private/heavier dependencies.
+# JDK 17 is forced because JitPack otherwise defaults to an older JDK.
 jdk:
   - openjdk17
-install:
-  - mvn install --batch-mode -pl mat-api -DskipTests -Dmaven.javadoc.skip=true

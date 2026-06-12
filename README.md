@@ -224,7 +224,7 @@ Maven:
 <dependency>
     <groupId>com.github.bloupyi.MinecraftAnimationTool</groupId>
     <artifactId>MinecraftAnimationTool-API</artifactId>
-    <version>v1.2</version> <!-- a git tag or commit hash -->
+    <version>v1.2.1</version> <!-- a git tag or commit hash -->
     <scope>provided</scope>
 </dependency>
 ```
@@ -233,7 +233,7 @@ Gradle:
 
 ```groovy
 repositories { maven { url 'https://jitpack.io' } }
-dependencies { compileOnly 'com.github.bloupyi.MinecraftAnimationTool:MinecraftAnimationTool-API:v1.2' }
+dependencies { compileOnly 'com.github.bloupyi.MinecraftAnimationTool:MinecraftAnimationTool-API:v1.2.1' }
 ```
 
 > The API lives in the `mat-api/` submodule of this repo, so the JitPack group is
