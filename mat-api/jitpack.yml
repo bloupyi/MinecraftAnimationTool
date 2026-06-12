@@ -1,7 +1,0 @@
-# Used by JitPack when this module is pushed to its own public GitHub repo.
-# Forces a JDK 17 build (JitPack defaults to an older JDK).
-jdk:
-  - openjdk17
-before_install:
-  - sdk install java 17.0.10-tem
-  - sdk use java 17.0.10-tem

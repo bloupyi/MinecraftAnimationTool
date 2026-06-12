@@ -222,9 +222,9 @@ Maven:
 </repositories>
 
 <dependency>
-    <groupId>com.github.bloupyi</groupId>
+    <groupId>com.github.bloupyi.MinecraftAnimationTool</groupId>
     <artifactId>MinecraftAnimationTool-API</artifactId>
-    <version>v1.0</version> <!-- a git tag or commit hash -->
+    <version>v1.2</version> <!-- a git tag or commit hash -->
     <scope>provided</scope>
 </dependency>
 ```
@@ -233,8 +233,12 @@ Gradle:
 
 ```groovy
 repositories { maven { url 'https://jitpack.io' } }
-dependencies { compileOnly 'com.github.bloupyi:MinecraftAnimationTool-API:v1.0' }
+dependencies { compileOnly 'com.github.bloupyi.MinecraftAnimationTool:MinecraftAnimationTool-API:v1.2' }
 ```
+
+> The API lives in the `mat-api/` submodule of this repo, so the JitPack group is
+> `com.github.bloupyi.MinecraftAnimationTool` (i.e. `com.github.<user>.<repo>`), not just
+> `com.github.bloupyi`. JitPack builds only this module (see `jitpack.yml`); the paid plugin is never published.
 
 ### Use it
 
