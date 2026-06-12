@@ -9,6 +9,7 @@ import fr.bloup.minecraftAnimationTool.gui.GuiManager;
 import fr.bloup.minecraftAnimationTool.managers.EditModeManager;
 import fr.bloup.minecraftAnimationTool.managers.EntityManager;
 import fr.bloup.minecraftAnimationTool.persistence.RigStore;
+import fr.bloup.minecraftAnimationTool.placeholder.MatPlaceholderExpansion;
 import fr.bloup.minecraftAnimationTool.pojos.AnimationState;
 import fr.bloup.minecraftAnimationTool.pojos.EntityPOJO;
 import fr.bloup.minecraftAnimationTool.readers.BlueprintCache;
@@ -103,7 +104,7 @@ public final class MinecraftAnimationTool extends JavaPlugin {
         entityManager.startTicker();
 
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
-            new fr.bloup.minecraftAnimationTool.placeholder.MatPlaceholderExpansion(this, entityManager).register();
+            new MatPlaceholderExpansion(this, entityManager).register();
             log.info("Hooked into PlaceholderAPI.");
         }
 

@@ -112,4 +112,7 @@ buildNumber.properties
 # Common working directory
 run/
 
+# Not published to the public repo
 docs/
+assets/
+CLAUDE.md

@@ -1,0 +1,42 @@
+MinecraftAnimationTool — Proprietary, Source-Available License
+Copyright (c) 2026 Bloup. All rights reserved.
+
+This source code is made publicly visible for transparency, reference, and
+educational reading only. It is NOT open source and is NOT released under any
+OSI-approved license.
+
+1. Grant
+   You are granted a personal, non-exclusive, non-transferable, revocable right
+   to view and read this source code, and to build it locally for the sole
+   purpose of evaluating or contributing fixes back to the copyright holder.
+
+2. Restrictions
+   Except with the prior, explicit, written permission of the copyright holder,
+   you may NOT:
+     a. copy, reproduce, or republish this code or any substantial portion of
+        it, in source or compiled form;
+     b. redistribute, sublicense, sell, rent, lease, or otherwise make this code
+        or any derivative or compiled artifact available to any third party;
+     c. use this code, in whole or in part, in any product, service, plugin, or
+        project, whether commercial or non-commercial;
+     d. remove, alter, or obscure this notice or any copyright or attribution
+        notice contained in the code.
+
+   The "mat-api" module is part of this same work and is covered by this license
+   unless and until it is published separately by the copyright holder under
+   different terms.
+
+3. Ownership
+   The copyright holder retains all right, title, and interest in and to this
+   software, including all intellectual property rights. No rights are granted
+   except those expressly stated above.
+
+4. No Warranty
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY,
+   WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR
+   IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+For licensing inquiries or permission requests, contact the copyright holder.
